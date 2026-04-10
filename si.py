@@ -2274,10 +2274,12 @@ class FootballPredictor:
                         updated_date = True
                         updated_any = True
 
-                    # Salva ogni 10 date per non perdere progressi se interrotto
+                    # Salva ogni 10 date e SINCRONIZZA su GitHub per non perdere dati tra PC
                     if updated_date and (i % 10 == 0 or i == total_dates):
                         self._save_weights()
                         self._safe_write_json(history_file, history)
+                        # Sincronizzazione intermedia automatica
+                        self.auto_git_sync(f"AI Learning Progress {i}/{total_dates}")
                     
                     # Delay per evitare ban da ESPN/API
                     if i < total_dates: time.sleep(1.5)
