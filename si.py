@@ -330,7 +330,7 @@ class FootballPredictor:
                 return None
 
     def _safe_write_json(self, file_path, data):
-        """Scrittura sicura di file JSON con blocco globale"""
+        """Scrittura sicura e ATOMICA di file JSON per evitare corruzioni in caso di chiusura improvvisa"""
         with file_lock:
             try:
                 # Se è history.json, aggiorniamo la cache in memoria
@@ -338,11 +338,23 @@ class FootballPredictor:
                     self._history_cache = data
                     self._history_last_read = time.time()
                 
-                with open(file_path, "w", encoding="utf-8") as f:
+                # Scriviamo prima su un file temporaneo (.tmp)
+                temp_path = file_path + ".tmp"
+                with open(temp_path, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=4)
+                
+                # Sostituiamo il file originale con quello temporaneo (operazione atomica nel file system)
+                if os.path.exists(file_path):
+                    os.replace(temp_path, file_path)
+                else:
+                    os.rename(temp_path, file_path)
+                    
                 return True
             except Exception as e:
                 self._log_error(f"Errore scrittura {file_path}: {e}")
+                # Pulizia file temporaneo se fallisce
+                if 'temp_path' in locals() and os.path.exists(temp_path):
+                    os.remove(temp_path)
                 return False
     def _load_weights(self):
         default_weights = {
@@ -402,6 +414,37 @@ class FootballPredictor:
                 f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
         except:
             pass
+
+    def auto_git_sync(self, message="Update AI knowledge and history", pull=False):
+        """Sincronizza automaticamente i file JSON su GitHub (Push e opzionalmente Pull)"""
+        if not os.path.exists(".git"): return
+        
+        def _sync_task():
+            try:
+                import subprocess
+                # 1. Se richiesto, facciamo prima il pull per evitare conflitti
+                if pull:
+                    print(f"\n{Colors.BLUE}[GIT] Sincronizzazione con il cloud (Pull)...{Colors.ENDC}", end=" ")
+                    subprocess.run(["git", "pull", "origin", "main"], capture_output=True)
+                    print(f"{Colors.GREEN}Fatto.{Colors.ENDC}")
+
+                # 2. Aggiunge solo i file di dati necessari
+                subprocess.run(["git", "add", "weights.json", "history.json"], capture_output=True)
+                # 3. Commit
+                subprocess.run(["git", "commit", "-m", f"{message} [{datetime.now().strftime('%Y-%m-%d %H:%M')}]"], capture_output=True)
+                # 4. Push
+                res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True)
+                if res.returncode == 0:
+                    print(f"\n{Colors.GREEN}[GIT] GitHub aggiornato con successo!{Colors.ENDC}")
+            except:
+                pass
+        
+        # Se è un pull (all'avvio), lo facciamo bloccare per avere i dati aggiornati subito
+        if pull:
+            _sync_task()
+        else:
+            threading.Thread(target=_sync_task, daemon=True).start()
+
     def _get(self, endpoint, params=None, use_cache=True):
         if self.api_suspended and endpoint != "status": return None
         cache_key = f"{endpoint}_{json.dumps(params, sort_keys=True)}"
@@ -2244,6 +2287,8 @@ class FootballPredictor:
                     correct = self.weights.get("correct_predictions", 0)
                     acc = (correct / total) * 100
                     print(f"\n{Colors.GREEN}[BG-LEARNING] Apprendimento totale completato! Accuratezza Globale: {acc:.1f}%{Colors.ENDC}")
+                    # Sincronizzazione automatica su GitHub a fine apprendimento
+                    self.auto_git_sync("AI Learning Complete - Updated weights and history")
                 else:
                     print(f"\n{Colors.BLUE}[BG-LEARNING] Analisi terminata. Nessun nuovo risultato trovato.{Colors.ENDC}")
                     
@@ -2980,6 +3025,8 @@ if __name__ == "__main__":
     # Token API-Sports (Sospeso - Usato solo come fallback se riattivato)
     API_KEY = "c5d860df8229a7ad907688ad36a7693a"
     p = FootballPredictor(API_KEY, fd_key=FD_KEY)
+    # Sincronizzazione iniziale con GitHub (Pull) per avere i dati aggiornati da altri PC
+    p.auto_git_sync("Startup Sync", pull=True)
     # Esegui Pulizia Cache all'avvio (veloce)
     p.clean_cache(days=30)
     # Verifica stato dei Token e avvio Auto-Learning in BACKGROUND

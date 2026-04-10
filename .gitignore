@@ -7,7 +7,6 @@ __pycache__/
 # Dati e Log pesanti
 *.csv
 errors.log
-history.json
 PRONOSTICI_TOP.txt
 pronostici.txt
 
