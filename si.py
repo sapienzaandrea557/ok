@@ -2286,27 +2286,43 @@ class FootballPredictor:
     def show_reality(self):
         """
         Modalità REALTA: Mostra il confronto tra pronostici fatti e dati reali aggiornati.
-        Usa ESPN come fallback se API-Sports blocca i dati 2025/2026.
+        Ottimizzato per grandi volumi: analizza solo gli ultimi 15 giorni o i pendenti.
         """
         history_file = "history.json"
         history = self._safe_read_json(history_file)
         if not history:
             print("\nNessun dato storico trovato o errore nel caricamento.")
             return
+        
+        # Filtro intelligente: match non processati (pendenti) + ultimi 20 per contesto
+        pending_matches = [h for h in history if not h.get('processed', False)]
+        
+        # Se ci sono troppi pendenti (es. 1255), limitiamo la visualizzazione a 100 per volta
+        # ma li lasciamo processare all'auto-learning in background
+        to_show_limit = 100
+        is_massive = len(pending_matches) > to_show_limit
+        
+        if is_massive:
+            print(f"\n{Colors.YELLOW}[!] Hai {len(pending_matches)} match pendenti. Mostro i 100 più recenti...{Colors.ENDC}")
+            # Ordiniamo per data decrescente
+            pending_matches.sort(key=lambda x: x.get('date', ''), reverse=True)
+            to_show = pending_matches[:to_show_limit]
+        else:
+            last_processed = [h for h in history if h.get('processed', False)][-20:]
+            to_show = pending_matches + last_processed
+            # Ordiniamo per data
+            to_show.sort(key=lambda x: x.get('date', ''))
+
         print(f"\n{'='*70}")
-        print(f"{'MODALITA REALTA - CONFRONTO PRONOSTICI (Incrocio ESPN/API)':^70}")
+        print(f"{'MODALITA REALTA - CONFRONTO PRONOSTICI':^70}")
         print(f"{'='*70}")
         print(f"{'MATCH':<35} | {'PREV':<10} | {'REALE':<6} | {'STATUS'}")
         print(f"{'-'*85}")
-        # Recuperiamo i dati per TUTTI i match non ancora processati + gli ultimi 50 per contesto
-        pending_matches = [h for h in history if not h.get('processed', False)]
-        last_processed = [h for h in history if h.get('processed', False)][-50:]
-        to_show = pending_matches + last_processed
-        print(f"\n[INFO] Analizzo {len(pending_matches)} nuovi match su {len(history)} totali.")
+        
         dates_to_check = list(set([h['date'] for h in to_show]))
         espn_data = {}
         if dates_to_check:
-            print(f"Recupero dati reali per {len(dates_to_check)} date diverse...", end=" ", flush=True)
+            print(f"Recupero dati reali per {len(dates_to_check)} date...", end=" ", flush=True)
             for d in dates_to_check:
                 espn_data[d] = self.get_espn_fixtures(d, quiet=True, top_only=False)
             print("Fatto.")
