@@ -2126,18 +2126,20 @@ class FootballPredictor:
                     by_date[d].append(h)
                 
                 sorted_dates = sorted(by_date.keys(), reverse=True)
-                # Limitiamo a 40 date per sessione per evitare sovraccarico
-                max_dates = 40
-                dates_to_process = sorted_dates[:max_dates]
+                total_dates = len(sorted_dates)
                 
-                print(f"\n{Colors.CYAN}[BG-LEARNING] Analisi in corso: {len(dates_to_process)} date su {len(sorted_dates)} totali...{Colors.ENDC}")
+                print(f"\n{Colors.CYAN}[BG-LEARNING] Avvio analisi totale: {len(to_process)} pronostici su {total_dates} date...{Colors.ENDC}")
                 
                 updated_any = False
                 lr = self.weights.get("learning_rate", 0.01)
                 
-                for i, date_str in enumerate(dates_to_process, 1):
+                for i, date_str in enumerate(sorted_dates, 1):
                     entries = by_date[date_str]
                     results = {}
+                    
+                    # Feedback periodico ogni 10 date
+                    if i % 10 == 0:
+                        print(f"{Colors.BLUE}[IA-STATUS] Elaborazione data {i}/{total_dates} ({date_str})...{Colors.ENDC}")
                     
                     # 1. Tenta API-Sports (solo se non sospesa)
                     if not self.api_suspended:
@@ -2230,20 +2232,20 @@ class FootballPredictor:
                         updated_any = True
 
                     # Salva ogni 10 date per non perdere progressi se interrotto
-                    if updated_date and (i % 10 == 0 or i == len(dates_to_process)):
+                    if updated_date and (i % 10 == 0 or i == total_dates):
                         self._save_weights()
                         self._safe_write_json(history_file, history)
                     
                     # Delay per evitare ban da ESPN/API
-                    if i < len(dates_to_process): time.sleep(1.5)
+                    if i < total_dates: time.sleep(1.5)
                 
                 if updated_any:
                     total = self.weights.get("total_analyzed", 1)
                     correct = self.weights.get("correct_predictions", 0)
                     acc = (correct / total) * 100
-                    print(f"\n{Colors.GREEN}[BG-LEARNING] Batch completato! Accuratezza Globale: {acc:.1f}%{Colors.ENDC}")
+                    print(f"\n{Colors.GREEN}[BG-LEARNING] Apprendimento totale completato! Accuratezza Globale: {acc:.1f}%{Colors.ENDC}")
                 else:
-                    print(f"\n{Colors.BLUE}[BG-LEARNING] Nessun nuovo risultato trovato in questo batch.{Colors.ENDC}")
+                    print(f"\n{Colors.BLUE}[BG-LEARNING] Analisi terminata. Nessun nuovo risultato trovato.{Colors.ENDC}")
                     
             except Exception as e:
                 self._log_error(f"Errore auto-learning: {e}")
@@ -2286,7 +2288,7 @@ class FootballPredictor:
     def show_reality(self):
         """
         Modalità REALTA: Mostra il confronto tra pronostici fatti e dati reali aggiornati.
-        Ottimizzato per grandi volumi: analizza solo gli ultimi 15 giorni o i pendenti.
+        Ottimizzato per grandi volumi: analizza i match pendenti a blocchi (Paginazione).
         """
         history_file = "history.json"
         history = self._safe_read_json(history_file)
@@ -2294,27 +2296,35 @@ class FootballPredictor:
             print("\nNessun dato storico trovato o errore nel caricamento.")
             return
         
-        # Filtro intelligente: match non processati (pendenti) + ultimi 20 per contesto
+        # Filtro intelligente: match non processati (pendenti)
         pending_matches = [h for h in history if not h.get('processed', False)]
+        pending_matches.sort(key=lambda x: x.get('date', ''), reverse=True)
         
-        # Se ci sono troppi pendenti (es. 1255), limitiamo la visualizzazione a 100 per volta
-        # ma li lasciamo processare all'auto-learning in background
-        to_show_limit = 100
-        is_massive = len(pending_matches) > to_show_limit
-        
-        if is_massive:
-            print(f"\n{Colors.YELLOW}[!] Hai {len(pending_matches)} match pendenti. Mostro i 100 più recenti...{Colors.ENDC}")
-            # Ordiniamo per data decrescente
-            pending_matches.sort(key=lambda x: x.get('date', ''), reverse=True)
-            to_show = pending_matches[:to_show_limit]
+        total_pending = len(pending_matches)
+        if total_pending == 0:
+            print(f"\n{Colors.GREEN}[V] Tutti i match sono stati processati dall'IA.{Colors.ENDC}")
+            last_processed = [h for h in history if h.get('processed', False)][-50:]
+            to_show = last_processed
+            start_idx = 0
         else:
-            last_processed = [h for h in history if h.get('processed', False)][-20:]
-            to_show = pending_matches + last_processed
-            # Ordiniamo per data
-            to_show.sort(key=lambda x: x.get('date', ''))
+            to_show_limit = 100
+            start_idx = 0
+            
+            if total_pending > to_show_limit:
+                print(f"\n{Colors.YELLOW}[!] Hai {total_pending} match pendenti.{Colors.ENDC}")
+                try:
+                    p_input = input(f"Mostro i 100 più recenti. Inserisci l'indice di inizio (1-{total_pending}) o premi Invio: ").strip()
+                    if p_input.isdigit():
+                        start_idx = max(0, int(p_input) - 1)
+                except:
+                    pass
+            
+            to_show = pending_matches[start_idx : start_idx + to_show_limit]
 
         print(f"\n{'='*70}")
         print(f"{'MODALITA REALTA - CONFRONTO PRONOSTICI':^70}")
+        if total_pending > 0:
+            print(f"{f'Visualizzazione match {start_idx+1} - {min(start_idx+len(to_show), total_pending)} di {total_pending}':^70}")
         print(f"{'='*70}")
         print(f"{'MATCH':<35} | {'PREV':<10} | {'REALE':<6} | {'STATUS'}")
         print(f"{'-'*85}")
