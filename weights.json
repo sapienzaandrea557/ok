@@ -1,0 +1,10 @@
+{
+    "w_forma": 0.05,
+    "w_class": 0.6,
+    "w_h2h": 0.05,
+    "w_cont": 0.6,
+    "learning_rate": 0.01,
+    "total_analyzed": 1804,
+    "correct_predictions": 778,
+    "last_csv_update": "2026-04-10"
+}

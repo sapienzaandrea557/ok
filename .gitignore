@@ -1,0 +1,21 @@
+# Cache e file temporanei
+api_cache.json
+api_cache_backup.json
+__pycache__/
+*.pyc
+
+# Dati e Log pesanti
+*.csv
+errors.log
+history.json
+PRONOSTICI_TOP.txt
+pronostici.txt
+
+# File di test e debug
+test_diretta_current.py
+debug_odds_raw.py
+debug_odds_exhaustive.py
+debug_match_info.py
+debug_tokens.py
+detect_fsign.py
+archive/
